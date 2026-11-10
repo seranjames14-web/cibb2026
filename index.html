@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bridgecart</title>
+<style>
+  :root {
+    --bg: #0f1115; --card: #181b22; --line: #2a2f3a; --text: #eef0f4;
+    --muted: #9aa3b2; --accent: #3ecf8e; --accent-text: #06241a; --danger: #ff6b6b;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  header { position: sticky; top: 0; z-index: 5; display: flex; align-items: center;
+           justify-content: space-between; padding: 12px 16px; background: var(--bg);
+           border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 20px; margin: 0; }
+  .row { display: flex; gap: 8px; align-items: center; }
+  main { max-width: 760px; margin: 0 auto; padding: 16px; }
+  h2 { font-size: 16px; margin: 24px 0 10px; color: var(--muted); font-weight: 600; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px; }
+  .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  @media (min-width: 600px) { .grid { grid-template-columns: repeat(3, 1fr); } }
+  .product .name { font-weight: 600; margin-bottom: 4px; }
+  .product .desc { color: var(--muted); font-size: 13px; min-height: 34px; }
+  .product .price { margin: 8px 0; font-size: 17px; }
+  button { font: inherit; border: 0; border-radius: 10px; padding: 10px 14px; cursor: pointer;
+           background: var(--accent); color: var(--accent-text); font-weight: 600; }
+  button.ghost { background: transparent; color: var(--text); border: 1px solid var(--line); }
+  button.small { padding: 6px 10px; }
+  button.danger { background: transparent; color: var(--danger); border: 1px solid var(--line); }
+  button:disabled { opacity: .5; cursor: default; }
+  input { width: 100%; font: inherit; padding: 12px; margin-bottom: 10px; color: var(--text);
+          background: var(--bg); border: 1px solid var(--line); border-radius: 10px; }
+  .cart-row { display: flex; align-items: center; justify-content: space-between;
+              gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .cart-row:last-child { border-bottom: 0; }
+  .qty { display: flex; align-items: center; gap: 8px; }
+  .total { display: flex; justify-content: space-between; font-size: 18px; font-weight: 700; padding-top: 12px; }
+  .muted { color: var(--muted); }
+  .hidden { display: none; }
+  #toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); max-width: 90%;
+           background: #232834; border: 1px solid var(--line); padding: 10px 16px; border-radius: 10px;
+           opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 10; }
+  #toast.show { opacity: 1; }
+  #setup-banner { background: #3a2a10; border: 1px solid #7a5a1a; color: #ffd68a;
+                  padding: 12px 16px; text-align: center; font-size: 14px; }
+</style>
+</head>
+<body>
+
+<div id="setup-banner" class="hidden">
+  Setup needed: open this file and paste your Supabase publishable key into <b>SUPABASE_KEY</b>.
+</div>
+
+<header>
+  <h1>🛒 Bridgecart</h1>
+  <div class="row">
+    <span id="user-email" class="muted hidden" style="font-size:12px"></span>
+    <button id="btn-login" class="ghost small" data-action="toggle-auth">Login</button>
+    <button id="btn-logout" class="ghost small hidden" data-action="logout">Logout</button>
+  </div>
+</header>
+
+<main>
+  <section id="auth-box" class="card hidden">
+    <input id="email" type="email" placeholder="Email" autocomplete="email">
+    <input id="password" type="password" placeholder="Password (min 6 characters)" autocomplete="current-password">
+    <div class="row">
+      <button data-action="signin">Sign in</button>
+      <button class="ghost" data-action="signup">Create account</button>
+    </div>
+  </section>
+
+  <h2>Products</h2>
+  <div id="products" class="grid"><div class="muted">Loading products…</div></div>
+
+  <h2>Your cart (<span id="cart-count">0</span>)</h2>
+  <section id="cart" class="card"><div class="muted">Login to use your cart.</div></section>
+</main>
+
+<div id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+// ====== SETTINGS: paste your key below ======
+const SUPABASE_URL = "https://gkmfyxxrrriwbolanehh.supabase.co";
+const SUPABASE_KEY = "sb_publishable_JpJkmj_GiOyoXS1ODG3S_A_nhgpOPLw";   // starts with sb_publishable_
+// ============================================
+
+const state = { user: null, products: [], cart: [] };
+
+// ---------- helpers ----------
+const $ = (id) => document.getElementById(id);
+
+function esc(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function money(n) {
+  return "₹" + Number(n || 0).toFixed(2);
+}
+
+function cartTotal(items) {
+  return items.reduce((sum, it) => sum + Number(it.price) * it.quantity, 0);
+}
+
+function cartCount(items) {
+  return items.reduce((sum, it) => sum + it.quantity, 0);
+}
+
+let toastTimer;
+function toast(msg) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("show"), 2600);
+}
+
+const keyMissing = !SUPABASE_KEY || SUPABASE_KEY.startsWith("PASTE_");
+let db = null;
+
+// ---------- rendering ----------
+function renderProducts() {
+  const box = $("products");
+  if (!state.products.length) {
+    box.innerHTML = '<div class="muted">No products yet.</div>';
+    return;
+  }
+  box.innerHTML = state.products.map((p) => `
+    <div class="card product">
+      <div class="name">${esc(p.name)}</div>
+      <div class="desc">${esc(p.description)}</div>
+      <div class="price">${money(p.price)}</div>
+      <button class="small" data-action="add" data-id="${esc(p.id)}">Add to cart</button>
+    </div>`).join("");
+}
+
+function renderCart() {
+  const box = $("cart");
+  $("cart-count").textContent = cartCount(state.cart);
+  if (!state.user) {
+    box.innerHTML = '<div class="muted">Login to use your cart.</div>';
+    return;
+  }
+  if (!state.cart.length) {
+    box.innerHTML = '<div class="muted">Your cart is empty.</div>';
+    return;
+  }
+  box.innerHTML = state.cart.map((it) => `
+    <div class="cart-row">
+      <div>
+        <div>${esc(it.name)}</div>
+        <div class="muted">${money(it.price)} each</div>
+      </div>
+      <div class="qty">
+        <button class="ghost small" data-action="dec" data-id="${esc(it.id)}">−</button>
+        <span>${it.quantity}</span>
+        <button class="ghost small" data-action="inc" data-id="${esc(it.id)}">+</button>
+        <button class="danger small" data-action="remove" data-id="${esc(it.id)}">✕</button>
+      </div>
+    </div>`).join("") +
+    `<div class="total"><span>Total</span><span>${money(cartTotal(state.cart))}</span></div>`;
+}
+
+function renderAuth() {
+  const loggedIn = !!state.user;
+  $("btn-login").classList.toggle("hidden", loggedIn);
+  $("btn-logout").classList.toggle("hidden", !loggedIn);
+  $("user-email").classList.toggle("hidden", !loggedIn);
+  $("user-email").textContent = loggedIn ? state.user.email : "";
+  if (loggedIn) $("auth-box").classList.add("hidden");
+}
+
+// ---------- data ----------
+async function loadProducts() {
+  const { data, error } = await db.from("products").select("*").order("id");
+  if (error) { toast("Could not load products: " + error.message); return; }
+  state.products = data || [];
+  renderProducts();
+}
+
+async function loadCart() {
+  if (!state.user) { state.cart = []; renderCart(); return; }
+  const { data, error } = await db
+    .from("cart_items")
+    .select("id, quantity, product_id, products(name, price)")
+    .order("id");
+  if (error) { toast("Could not load cart: " + error.message); return; }
+  state.cart = (data || []).map((r) => ({
+    id: r.id,
+    product_id: r.product_id,
+    quantity: r.quantity,
+    name: r.products ? r.products.name : "(removed product)",
+    price: r.products ? r.products.price : 0,
+  }));
+  renderCart();
+}
+
+// ---------- actions ----------
+async function addToCart(productId) {
+  if (!state.user) {
+    $("auth-box").classList.remove("hidden");
+    toast("Please login first");
+    return;
+  }
+  const existing = state.cart.find((c) => String(c.product_id) === String(productId));
+  const { error } = existing
+    ? await db.from("cart_items").update({ quantity: existing.quantity + 1 }).eq("id", existing.id)
+    : await db.from("cart_items").insert({ product_id: Number(productId), quantity: 1 });
+  if (error) { toast("Could not add: " + error.message); return; }
+  toast("Added to cart");
+  await loadCart();
+}
+
+async function changeQty(itemId, delta) {
+  const item = state.cart.find((c) => String(c.id) === String(itemId));
+  if (!item) return;
+  const next = item.quantity + delta;
+  if (next < 1) return removeItem(itemId);
+  const { error } = await db.from("cart_items").update({ quantity: next }).eq("id", item.id);
+  if (error) { toast("Could not update: " + error.message); return; }
+  await loadCart();
+}
+
+async function removeItem(itemId) {
+  const { error } = await db.from("cart_items").delete().eq("id", itemId);
+  if (error) { toast("Could not remove: " + error.message); return; }
+  await loadCart();
+}
+
+function readCredentials() {
+  const email = $("email").value.trim();
+  const password = $("password").value;
+  if (!email || password.length < 6) {
+    toast("Enter email and a password of 6+ characters");
+    return null;
+  }
+  return { email, password };
+}
+
+async function signUp() {
+  const creds = readCredentials();
+  if (!creds) return;
+  const { data, error } = await db.auth.signUp(creds);
+  if (error) { toast(error.message); return; }
+  toast(data.session ? "Account created" : "Check your email to confirm, then sign in");
+}
+
+async function signIn() {
+  const creds = readCredentials();
+  if (!creds) return;
+  const { error } = await db.auth.signInWithPassword(creds);
+  if (error) { toast(error.message); return; }
+  toast("Signed in");
+}
+
+async function signOut() {
+  await db.auth.signOut();
+  toast("Signed out");
+}
+
+// ---------- events ----------
+document.addEventListener("click", (e) => {
+  const el = e.target.closest("[data-action]");
+  if (!el || !db) return;
+  const id = el.dataset.id;
+  switch (el.dataset.action) {
+    case "toggle-auth": $("auth-box").classList.toggle("hidden"); break;
+    case "signin": signIn(); break;
+    case "signup": signUp(); break;
+    case "logout": signOut(); break;
+    case "add": addToCart(id); break;
+    case "inc": changeQty(id, 1); break;
+    case "dec": changeQty(id, -1); break;
+    case "remove": removeItem(id); break;
+  }
+});
+
+// ---------- start ----------
+async function start() {
+  if (keyMissing) {
+    $("setup-banner").classList.remove("hidden");
+    $("products").innerHTML = '<div class="muted">Add your key to load products.</div>';
+    return;
+  }
+  db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  db.auth.onAuthStateChange((_event, session) => {
+    state.user = session ? session.user : null;
+    renderAuth();
+    // defer so the auth client is not re-entered inside its own callback
+    setTimeout(loadCart, 0);
+  });
+  await loadProducts();
+}
+
+start();
+</script>
+</body>
+</html>
