@@ -82,12 +82,12 @@
 
 <div id="toast"></div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.0"></script>
 <script>
-// ====== SETTINGS: paste your key below ======
-https://gkmfyxxrrriwbolanehh.supabase.co
-sb_publishable_JpJkmj_GiOyoXS1ODG3S_A_nhgpOPLw
-// ============================================
+// ====== SETTINGS ======
+const SUPABASE_URL = "https://gkmfyxxrrriwbolanehh.supabase.co";
+const SUPABASE_KEY = "sb_publishable_JpJkmj_GiOyoXS1ODG3S_A_nhgpOPLw";
+// ======================
 
 const state = { user: null, products: [], cart: [] };
 
@@ -208,9 +208,11 @@ async function addToCart(productId) {
     return;
   }
   const existing = state.cart.find((c) => String(c.product_id) === String(productId));
+  // Use the product's real id from the loaded list so numeric and UUID ids both work
+  const product = state.products.find((p) => String(p.id) === String(productId));
   const { error } = existing
     ? await db.from("cart_items").update({ quantity: existing.quantity + 1 }).eq("id", existing.id)
-    : await db.from("cart_items").insert({ product_id: Number(productId), quantity: 1 });
+    : await db.from("cart_items").insert({ product_id: product ? product.id : productId, quantity: 1 });
   if (error) { toast("Could not add: " + error.message); return; }
   toast("Added to cart");
   await loadCart();
