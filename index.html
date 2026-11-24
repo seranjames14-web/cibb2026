@@ -1,95 +1,510 @@
-create table if not exists public.profiles (
-  id uuid primary key references auth.users(id) on delete cascade,
-  email text,
-  role text not null default 'buyer' check (role in ('buyer', 'cibb_admin', 'sourcing_manager', 'compliance_officer')),
-  created_at timestamptz not null default now()
-);
-alter table public.profiles enable row level security;
+<!doctype html>
+<html lang="en">
+<head>
+<metacharset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="CIBB">
+<meta name="theme-color" content="#12345A">
+<title>CIBB — China India Business Bridge</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy: #12345A; --navy-dark: #0C233D; --steel: #526D8A;
+    --orange: #F28C28; --orange-dark: #DC7818;
+    --bg: #F4F7FA; --card: #FFFFFF; --line: #DDE4ED; --danger: #D9383A;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0; background: var(--bg); color: var(--navy);
+    font-family: "Montserrat", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    padding-bottom: calc(86px + env(safe-area-inset-bottom));
+  }
+  header {
+    position: sticky; top: 0; z-index: 10; background: var(--navy); color: #FFFFFF;
+    padding: calc(12px + env(safe-area-inset-top)) 16px 12px;
+    border-bottom: 3px solid var(--orange);
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  }
+  .brand h1 { font-size: 19px; font-weight: 800; margin: 0; letter-spacing: .5px; }
+  .brand .tag { font-size: 10px; font-weight: 500; color: #BFD0E2; letter-spacing: 1.1px; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  main { max-width: 780px; margin: 0 auto; padding: 14px; }
+  h2 { font-size: 16px; font-weight: 800; margin: 14px 0 10px; color: var(--navy); }
+  .hero {
+    background: linear-gradient(135deg, var(--navy) 0%, #1D4D82 100%);
+    color: #FFFFFF; border-radius: 18px; padding: 18px; margin-bottom: 14px;
+  }
+  .hero h2 { color: #FFFFFF; margin: 0 0 6px; font-size: 18px; }
+  .hero p { margin: 0 0 14px; font-size: 13px; color: #D7E3F0; line-height: 1.45; }
+  .card {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 16px; padding: 14px; box-shadow: 0 2px 8px rgba(18, 52, 90, 0.05);
+    margin-bottom: 12px;
+  }
+  .stack { display: flex; flex-direction: column; gap: 10px; }
+  .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  @media (min-width: 600px) { .grid { grid-template-columns: repeat(3, 1fr); } }
+  .product { display: flex; flex-direction: column; justify-content: space-between; margin-bottom: 0; }
+  .product .name { font-weight: 700; font-size: 14px; margin-bottom: 4px; }
+  .product .desc { color: var(--steel); font-size: 12px; min-height: 32px; line-height: 1.4; }
+  .product .price { margin: 10px 0; font-size: 16px; font-weight: 800; color: var(--navy); }
+  .badge {
+    display: inline-block; padding: 4px 9px; border-radius: 999px;
+    font-size: 11px; font-weight: 700; background: #FFF3E6; color: var(--orange-dark);
+  }
+  .badge.staff { background: var(--orange); color: #FFFFFF; }
+  button, a.btn-link {
+    font: inherit; border: 0; border-radius: 12px; min-height: 46px; padding: 10px 14px;
+    cursor: pointer; touch-action: manipulation; user-select: none;
+    background: var(--orange); color: #FFFFFF; font-weight: 700; font-size: 14px;
+    display: inline-flex; align-items: center; justify-content: center; text-decoration: none;
+    transition: transform .08s ease;
+  }
+  button:active, .nav-btn:active { transform: scale(0.97); }
+  button.navy { background: var(--navy); color: #FFFFFF; width: 100%; }
+  button.ghost, a.btn-link.ghost { background: transparent; color: var(--navy); border: 1px solid var(--line); }
+  header button.ghost {
+    color: #FFFFFF; border-color: rgba(255,255,255,0.35);
+    min-height: 38px; padding: 6px 12px; font-size: 13px;
+  }
+  button.small { min-height: 42px; padding: 8px 12px; font-size: 13px; width: 100%; }
+  button.qty-btn { min-height: 44px; min-width: 44px; width: auto; padding: 0; font-size: 18px; }
+  button.danger { background: #FFF5F5; color: var(--danger); border: 1px solid #F3C2C3; }
+  input, select, textarea {
+    width: 100%; font: inherit; font-size: 16px; min-height: 48px;
+    padding: 12px; margin-bottom: 10px; color: var(--navy);
+    background: #FFFFFF; border: 1px solid var(--line); border-radius: 12px;
+  }
+  .cart-row {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--line);
+  }
+  .cart-row:last-child { border-bottom: 0; }
+  .qty { display: flex; align-items: center; gap: 8px; }
+  .total {
+    display: flex; justify-content: space-between; font-size: 18px; font-weight: 800;
+    padding-top: 14px; border-top: 2px solid var(--line); margin-top: 6px;
+  }
+  .kpi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+  .kpi { background: var(--navy); color: #FFFFFF; border-radius: 14px; padding: 12px; text-align: center; }
+  .kpi .lbl { font-size: 10px; color: #BFD0E2; }
+  .kpi .val { font-size: 20px; font-weight: 800; margin-top: 4px; }
+  .muted { color: var(--steel); font-size: 13px; }
+  .hidden { display: none !important; }
+  .bottom-nav {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 15;
+    background: #FFFFFF; border-top: 1px solid var(--line);
+    padding: 8px 6px calc(8px + env(safe-area-inset-bottom));
+    display: flex; justify-content: space-around; gap: 4px;
+    box-shadow: 0 -4px 16px rgba(18, 52, 90, 0.08);
+  }
+  .nav-btn {
+    flex: 1; background: transparent; color: var(--steel); min-height: 48px;
+    border-radius: 12px; font-size: 11px; font-weight: 700;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+    touch-action: manipulation; border: 0; padding: 4px;
+  }
+  .nav-btn.active { background: #FFF3E6; color: var(--orange-dark); }
+  .nav-icon { font-size: 18px; line-height: 1; }
+  #toast {
+    position: fixed; left: 50%; bottom: calc(82px + env(safe-area-inset-bottom));
+    transform: translateX(-50%); max-width: 90%;
+    background: var(--navy-dark); color: #FFFFFF; padding: 12px 18px; border-radius: 12px;
+    font-size: 13px; font-weight: 600; opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 20;
+  }
+  #toast.show { opacity: 1; }
+</style>
+</head>
+<body>
 
-create or replace function public.handle_new_user()
-returns trigger language plpgsql security definer set search_path = public as $$
-begin
-  insert into public.profiles (id, email, role) values (new.id, new.email, 'buyer') on conflict (id) do nothing;
-  return new;
-end;
-$$;
-drop trigger if exists on_auth_user_created on auth.users;
-create trigger on_auth_user_created after insert on auth.users for each row execute procedure public.handle_new_user();
+<header>
+  <div class="brand">
+    <h1>CIBB</h1>
+    <div class="tag">SOURCE. SIMPLIFY. SMILE.</div>
+  </div>
+  <div class="row">
+    <span id="role-badge" class="badge staff hidden"></span>
+    <button id="btn-login" class="ghost" data-action="toggle-auth">Login</button>
+    <button id="btn-logout" class="ghost hidden" data-action="logout">Logout</button>
+  </div>
+</header>
 
-insert into public.profiles (id, email) select id, email from auth.users on conflict (id) do nothing;
+<main>
+  <section id="auth-box" class="card hidden">
+    <input id="email" type="email" placeholder="Email" autocomplete="email">
+    <input id="password" type="password" placeholder="Password (min 6 characters)" autocomplete="current-password">
+    <div class="row">
+      <button style="flex:1" data-action="signin">Sign in</button>
+      <button class="ghost" style="flex:1" data-action="signup">Create account</button>
+    </div>
+  </section>
 
-create or replace function public.is_cibb_staff()
-returns boolean language sql stable security definer set search_path = public as $$
-  select exists (select 1 from public.profiles where id = auth.uid() and role in ('cibb_admin', 'sourcing_manager', 'compliance_officer'));
-$$;
+  <!-- 1. HOME -->
+  <section id="view-home">
+    <div class="hero">
+      <h2>China → Tamil Nadu Direct Sourcing</h2>
+      <p>Verified factories, shared container MOQs, and Chennai port clearance in one place.</p>
+      <div class="row">
+        <button data-tab="catalog">Browse Catalog</button>
+        <a class="btn-link ghost" style="color:#fff;border-color:rgba(255,255,255,.4)" href="https://forms.gle/KAA5U41pBBpnVduE8" target="_blank" rel="noopener">Feedback</a>
+      </div>
+    </div>
+    <h2>Live Group-Buy & Factory Deals</h2>
+    <div id="highlights" class="stack"><div class="muted">Loading deals…</div></div>
+  </section>
 
-drop policy if exists "Users and staff view profiles" on public.profiles;
-create policy "Users and staff view profiles" on public.profiles for select to authenticated using (id = auth.uid() or public.is_cibb_staff());
+  <!-- 2. CATALOG -->
+  <section id="view-catalog" class="hidden">
+    <h2>Construction Catalog</h2>
+    <div id="products" class="grid"><div class="muted">Loading products…</div></div>
+  </section>
 
-create table if not exists public.home_highlights (
-  id bigint generated always as identity primary key,
-  title text not null,
-  subtitle text,
-  category text not null,
-  moq_label text not null,
-  est_price_inr numeric(10,2) not null default 0,
-  badge text default 'Factory Direct',
-  is_active boolean not null default true,
-  sort_order int not null default 1,
-  created_at timestamptz not null default now()
-);
-alter table public.home_highlights enable row level security;
+  <!-- 3. CART -->
+  <section id="view-cart" class="hidden">
+    <h2>Your Cart (<span id="cart-count-title">0</span>)</h2>
+    <div id="cart" class="card"><div class="muted">Login to use your cart.</div></div>
+  </section>
 
-drop policy if exists "Anyone can view active highlights" on public.home_highlights;
-create policy "Anyone can view active highlights" on public.home_highlights for select to anon, authenticated using (is_active = true or public.is_cibb_staff());
+  <!-- 4. 3-TAP SOURCING RFQ -->
+  <section id="view-source" class="hidden">
+    <div class="card">
+      <h2 style="margin-top:0">3-Tap Sourcing Request</h2>
+      <p class="muted" style="margin-top:0">Need an unlisted China material? Send specs directly to a CIBB Sourcing Manager.</p>
+      <select id="rfq-category">
+        <option value="Tiles & Stone">1. Tiles, Granite & Porcelain</option>
+        <option value="Sanitaryware & Fittings">1. Sanitaryware & Bath Fittings</option>
+        <option value="LED & Electrical">1. Commercial LED & Electrical</option>
+        <option value="Hardware & Aluminum">1. Architectural Hardware & UPVC</option>
+        <option value="Machinery & Tools">1. Construction Machinery & Tools</option>
+      </select>
+      <input id="rfq-title" type="text" placeholder="2. Item name & spec (e.g., 600×1200mm Tiles)">
+      <input id="rfq-qty" type="number" min="1" placeholder="3. Quantity (sq.ft / units)">
+      <input id="rfq-budget" type="number" min="1" placeholder="Target budget in ₹ (INR)">
+      <textarea id="rfq-notes" rows="2" placeholder="Delivery city (Chennai / Coimbatore) & BIS notes"></textarea>
+      <button class="navy" data-action="submit-rfq">Submit Request</button>
+    </div>
+  </section>
 
-drop policy if exists "Staff manage highlights" on public.home_highlights;
-create policy "Staff manage highlights" on public.home_highlights for all to authenticated using (public.is_cibb_staff()) with check (public.is_cibb_staff());
+  <!-- 5. ADMIN PANEL (ROLE-GATED) -->
+  <section id="view-admin" class="hidden">
+    <div class="kpi-grid">
+      <div class="kpi"><div class="lbl">Deals</div><div class="val" id="kpi-deals">0</div></div>
+      <div class="kpi"><div class="lbl">Products</div><div class="val" id="kpi-skus">0</div></div>
+      <div class="kpi"><div class="lbl">RFQs</div><div class="val" id="kpi-rfqs">0</div></div>
+    </div>
 
-insert into public.home_highlights (title, subtitle, category, moq_label, est_price_inr, badge, sort_order)
-select * from (values
-  ('Foshan 600×1200mm Vitrified Tiles', 'Direct container share to Chennai Port', 'Tiles & Stone', 'MOQ: 500 sq.ft', 68.00, 'Group-Buy Open', 1),
-  ('Commercial LED Panel 36W', 'BIS-compliant driver, 3-yr warranty', 'LED & Electrical', 'MOQ: 100 pcs', 340.00, 'BIS Ready', 2),
-  ('304 SS Concealed Bath Mixer', 'Brushed matte finish, ceramic cartridge', 'Sanitaryware', 'MOQ: 25 sets', 1850.00, 'Factory Direct', 3)
-) as v(title, subtitle, category, moq_label, est_price_inr, badge, sort_order)
-where not exists (select 1 from public.home_highlights);
+    <div class="card">
+      <h2 style="margin-top:0">Add Home Deal</h2>
+      <input id="adm-h-title" type="text" placeholder="Deal title">
+      <input id="adm-h-sub" type="text" placeholder="Subtitle (e.g., Chennai Port)">
+      <input id="adm-h-cat" type="text" placeholder="Category (e.g., Tiles & Stone)">
+      <input id="adm-h-moq" type="text" placeholder="MOQ (e.g., MOQ: 500 sq.ft)">
+      <input id="adm-h-price" type="number" placeholder="Est. Price ₹">
+      <button class="navy" data-action="add-highlight">Post Deal to Home</button>
+    </div>
 
-delete from public.products;
-insert into public.products (name, description, price) values
-  ('Foshan Vitrified Tile 600×1200mm', 'Glazed porcelain, 10mm, per sq.ft (Chennai FOB+Clearance est.)', 68.00),
-  ('36W Commercial LED Panel', 'BIS-ready driver, 4000K/6500K, 3-yr warranty, per pc', 340.00),
-  ('304 SS Concealed Bath Mixer', 'Brushed matte finish, ceramic cartridge, per set', 1850.00),
-  ('UPVC Casement Window Profile', 'UV-stabilized 60mm series, 5.8m bar, per bar', 1120.00),
-  ('Acoustic Gypsum Ceiling Board', '12mm moisture-resistant 4×6 ft sheet, per sheet', 410.00),
-  ('Heavy-Duty Hydraulic Door Closer', 'EN3-EN4 fire-rated aluminum body, per unit', 1290.00);
+    <div class="card">
+      <h2 style="margin-top:0">Add Catalog Product</h2>
+      <input id="adm-p-name" type="text" placeholder="Product name">
+      <input id="adm-p-desc" type="text" placeholder="Specs / unit">
+      <input id="adm-p-price" type="number" placeholder="Price ₹">
+      <button class="navy" data-action="add-product">Add to Catalog</button>
+    </div>
 
-drop policy if exists "Staff manage products" on public.products;
-create policy "Staff manage products" on public.products for all to authenticated using (public.is_cibb_staff()) with check (public.is_cibb_staff());
+    <div class="card">
+      <div class="row" style="justify-content:space-between;margin-bottom:8px">
+        <h2 style="margin:0">Buyer RFQs</h2>
+        <button class="ghost" style="min-height:36px;padding:6px 10px" data-action="refresh-admin">Refresh</button>
+      </div>
+      <div id="admin-rfq-list" class="muted">Loading RFQs…</div>
+    </div>
+  </section>
+</main>
 
-create table if not exists public.rfqs (
-  id bigint generated always as identity primary key,
-  buyer_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
-  category text not null,
-  title text not null,
-  quantity int not null check (quantity > 0),
-  target_budget_inr numeric(12,2) default 0,
-  notes text,
-  status text not null default 'open',
-  created_at timestamptz not null default now()
-);
-alter table public.rfqs enable row level security;
+<nav class="bottom-nav">
+  <button class="nav-btn active" data-tab="home"><span class="nav-icon">🏠</span><span>Home</span></button>
+  <button class="nav-btn" data-tab="catalog"><span class="nav-icon">🧱</span><span>Catalog</span></button>
+  <button class="nav-btn" data-tab="cart"><span class="nav-icon">🛒</span><span>Cart (<span id="cart-count">0</span>)</span></button>
+  <button class="nav-btn" data-tab="source"><span class="nav-icon">🤖</span><span>Source</span></button>
+  <button id="tab-admin" class="nav-btn hidden" data-tab="admin"><span class="nav-icon">🛡️</span><span>Admin</span></button>
+</nav>
 
-drop policy if exists "Buyers insert own rfqs" on public.rfqs;
-create policy "Buyers insert own rfqs" on public.rfqs for insert to authenticated with check (buyer_id = auth.uid());
+<div id="toast"></div>
 
-drop policy if exists "Buyers and staff view rfqs" on public.rfqs;
-create policy "Buyers and staff view rfqs" on public.rfqs for select to authenticated using (buyer_id = auth.uid() or public.is_cibb_staff());
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const SUPABASE_URL = "https://gkmfyxxrrriwbolanehh.supabase.co";
+const SUPABASE_KEY = "sb_publishable_JpJkmj_GiOyoXS1ODG3S_A_nhgpOPLw";
+const STAFF_ROLES = new Set(["cibb_admin", "sourcing_manager", "compliance_officer"]);
 
-drop policy if exists "Staff update rfqs" on public.rfqs;
-create policy "Staff update rfqs" on public.rfqs for update to authenticated using (public.is_cibb_staff()) with check (public.is_cibb_staff());
+const state = { user: null, role: "buyer", highlights: [], products: [], cart: [], rfqs: [] };
+const $ = (id) => document.getElementById(id);
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const money = (n) => "₹" + Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-grant select on public.profiles to authenticated;
-grant select, insert, update, delete on public.home_highlights to authenticated;
-grant select on public.home_highlights to anon;
-grant insert, update, delete on public.products to authenticated;
-grant select, insert, update on public.rfqs to authenticated;
+let toastTimer;
+function toast(msg) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("show"), 2600);
+}
+
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+function switchTab(name) {
+  ["home", "catalog", "cart", "source", "admin"].forEach((t) => {
+    $("view-" + t).classList.toggle("hidden", t !== name);
+  });
+  document.querySelectorAll(".nav-btn[data-tab]").forEach((el) => {
+    el.classList.toggle("active", el.dataset.tab === name);
+  });
+  if (name === "admin") loadAdminRfqs();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function renderHighlights() {
+  $("kpi-deals").textContent = state.highlights.length;
+  const box = $("highlights");
+  if (!state.highlights.length) { box.innerHTML = '<div class="card muted">No live deals yet.</div>'; return; }
+  box.innerHTML = state.highlights.map((h) => `
+    <div class="card" style="margin-bottom:0">
+      <div class="row" style="justify-content:space-between;margin-bottom:6px">
+        <span class="badge">${esc(h.badge)}</span>
+        <span class="muted">${esc(h.category)}</span>
+      </div>
+      <div style="font-weight:800;font-size:15px;margin-bottom:4px">${esc(h.title)}</div>
+      <div class="muted" style="margin-bottom:8px">${esc(h.subtitle)}</div>
+      <div class="row" style="justify-content:space-between">
+        <span style="font-weight:800;font-size:16px">${money(h.est_price_inr)}</span>
+        <span class="muted">${esc(h.moq_label)}</span>
+      </div>
+    </div>`).join("");
+}
+
+function renderProducts() {
+  $("kpi-skus").textContent = state.products.length;
+  const box = $("products");
+  if (!state.products.length) { box.innerHTML = '<div class="muted">No products yet.</div>'; return; }
+  box.innerHTML = state.products.map((p) => `
+    <div class="card product">
+      <div>
+        <div class="name">${esc(p.name)}</div>
+        <div class="desc">${esc(p.description)}</div>
+      </div>
+      <div>
+        <div class="price">${money(p.price)}</div>
+        <button class="small" data-action="add" data-id="${esc(p.id)}">Add to cart</button>
+      </div>
+    </div>`).join("");
+}
+
+function renderCart() {
+  const box = $("cart");
+  const count = state.cart.reduce((s, it) => s + it.quantity, 0);
+  const total = state.cart.reduce((s, it) => s + Number(it.price) * it.quantity, 0);
+  $("cart-count").textContent = count;
+  $("cart-count-title").textContent = count;
+  if (!state.user) { box.innerHTML = '<div class="muted">Login to use your cart.</div>'; return; }
+  if (!state.cart.length) { box.innerHTML = '<div class="muted">Your cart is empty.</div>'; return; }
+  box.innerHTML = state.cart.map((it) => `
+    <div class="cart-row">
+      <div>
+        <div style="font-weight:700">${esc(it.name)}</div>
+        <div class="muted">${money(it.price)} each</div>
+      </div>
+      <div class="qty">
+        <button class="ghost qty-btn" data-action="dec" data-id="${esc(it.id)}">−</button>
+        <span style="min-width:22px;text-align:center;font-weight:700">${it.quantity}</span>
+        <button class="ghost qty-btn" data-action="inc" data-id="${esc(it.id)}">+</button>
+        <button class="danger qty-btn" data-action="remove" data-id="${esc(it.id)}">✕</button>
+      </div>
+    </div>`).join("") +
+    `<div class="total"><span>Total</span><span>${money(total)}</span></div>`;
+}
+
+function renderAuth() {
+  const loggedIn = !!state.user;
+  const isStaff = loggedIn && STAFF_ROLES.has(state.role);
+  $("btn-login").classList.toggle("hidden", loggedIn);
+  $("btn-logout").classList.toggle("hidden", !loggedIn);
+  $("tab-admin").classList.toggle("hidden", !isStaff);
+  $("role-badge").classList.toggle("hidden", !isStaff);
+  if (isStaff) $("role-badge").textContent = state.role.replace("_", " ").toUpperCase();
+  if (loggedIn) $("auth-box").classList.add("hidden");
+  if (!isStaff && !$("view-admin").classList.contains("hidden")) switchTab("home");
+}
+
+function renderAdminRfqs() {
+  $("kpi-rfqs").textContent = state.rfqs.length;
+  const box = $("admin-rfq-list");
+  if (!state.rfqs.length) { box.innerHTML = '<div class="muted">No RFQs yet.</div>'; return; }
+  box.innerHTML = state.rfqs.map((r) => `
+    <div class="cart-row" style="align-items:flex-start;flex-direction:column">
+      <div class="row" style="width:100%;justify-content:space-between">
+        <strong>${esc(r.title)}</strong>
+        <span class="badge">${esc(r.status || "open")}</span>
+      </div>
+      <div class="muted">${esc(r.category)} • Qty: ${esc(r.quantity)} • Budget: ${money(r.target_budget_inr)}</div>
+      ${r.notes ? `<div class="muted">${esc(r.notes)}</div>` : ""}
+      <div class="row" style="margin-top:6px;width:100%">
+        <button class="ghost" style="flex:1;min-height:40px" data-action="rfq-status" data-id="${esc(r.id)}" data-status="quoting">Quoting</button>
+        <button style="flex:1;min-height:40px" data-action="rfq-status" data-id="${esc(r.id)}" data-status="quoted">Quoted</button>
+      </div>
+    </div>`).join("");
+}
+
+async function loadHighlights() {
+  const { data } = await db.from("home_highlights").select("*").eq("is_active", true).order("sort_order");
+  state.highlights = data || [];
+  renderHighlights();
+}
+async function loadProducts() {
+  const { data } = await db.from("products").select("*").order("id");
+  state.products = data || [];
+  renderProducts();
+}
+async function loadRole() {
+  if (!state.user) { state.role = "buyer"; renderAuth(); return; }
+  const { data } = await db.from("profiles").select("role").eq("id", state.user.id).maybeSingle();
+  state.role = data && data.role ? data.role : "buyer";
+  renderAuth();
+}
+async function loadCart() {
+  if (!state.user) { state.cart = []; renderCart(); return; }
+  const { data } = await db.from("cart_items").select("id, quantity, product_id, products(name, price)").order("id");
+  state.cart = (data || []).map((r) => ({
+    id: r.id, product_id: r.product_id, quantity: r.quantity,
+    name: r.products ? r.products.name : "(removed)", price: r.products ? r.products.price : 0
+  }));
+  renderCart();
+}
+async function loadAdminRfqs() {
+  if (!STAFF_ROLES.has(state.role)) return;
+  const { data, error } = await db.from("rfqs").select("*").order("created_at", { ascending: false });
+  if (error) { toast(error.message); return; }
+  state.rfqs = data || [];
+  renderAdminRfqs();
+}
+
+async function addToCart(productId) {
+  if (!state.user) { $("auth-box").classList.remove("hidden"); window.scrollTo({ top: 0, behavior: "smooth" }); toast("Please login first"); return; }
+  const existing = state.cart.find((c) => String(c.product_id) === String(productId));
+  const { error } = existing
+    ? await db.from("cart_items").update({ quantity: existing.quantity + 1 }).eq("id", existing.id)
+    : await db.from("cart_items").insert({ product_id: Number(productId), quantity: 1 });
+  if (error) { toast(error.message); return; }
+  toast("Added to cart");
+  await loadCart();
+}
+async function changeQty(id, delta) {
+  const item = state.cart.find((c) => String(c.id) === String(id));
+  if (!item) return;
+  const next = item.quantity + delta;
+  if (next < 1) return removeItem(id);
+  await db.from("cart_items").update({ quantity: next }).eq("id", item.id);
+  await loadCart();
+}
+async function removeItem(id) {
+  await db.from("cart_items").delete().eq("id", id);
+  await loadCart();
+}
+async function submitRfq() {
+  if (!state.user) { $("auth-box").classList.remove("hidden"); window.scrollTo({ top: 0, behavior: "smooth" }); toast("Login first"); return; }
+  const title = $("rfq-title").value.trim();
+  const quantity = Number($("rfq-qty").value);
+  if (!title || quantity < 1) { toast("Enter item name and quantity"); return; }
+  const { error } = await db.from("rfqs").insert({
+    buyer_id: state.user.id, category: $("rfq-category").value, title, quantity,
+    target_budget_inr: Number($("rfq-budget").value || 0), notes: $("rfq-notes").value.trim(), status: "open"
+  });
+  if (error) { toast(error.message); return; }
+  $("rfq-title").value = ""; $("rfq-qty").value = ""; $("rfq-budget").value = ""; $("rfq-notes").value = "";
+  toast("Sourcing request sent!");
+}
+async function addHighlight() {
+  const title = $("adm-h-title").value.trim();
+  const category = $("adm-h-cat").value.trim() || "Construction";
+  const moq_label = $("adm-h-moq").value.trim() || "MOQ: 100 units";
+  const est_price_inr = Number($("adm-h-price").value || 0);
+  if (!title) { toast("Enter deal title"); return; }
+  const { error } = await db.from("home_highlights").insert({
+    title, subtitle: $("adm-h-sub").value.trim(), category, moq_label, est_price_inr, is_active: true
+  });
+  if (error) { toast(error.message); return; }
+  $("adm-h-title").value = ""; $("adm-h-sub").value = ""; $("adm-h-cat").value = ""; $("adm-h-moq").value = ""; $("adm-h-price").value = "";
+  toast("Deal posted to Home!");
+  await loadHighlights();
+}
+async function addProduct() {
+  const name = $("adm-p-name").value.trim();
+  const price = Number($("adm-p-price").value || 0);
+  if (!name || price <= 0) { toast("Enter product name and price"); return; }
+  const { error } = await db.from("products").insert({ name, description: $("adm-p-desc").value.trim(), price });
+  if (error) { toast(error.message); return; }
+  $("adm-p-name").value = ""; $("adm-p-desc").value = ""; $("adm-p-price").value = "";
+  toast("Product added to Catalog!");
+  await loadProducts();
+}
+async function updateRfqStatus(id, status) {
+  const { error } = await db.from("rfqs").update({ status }).eq("id", id);
+  if (error) { toast(error.message); return; }
+  toast("Updated to " + status);
+  await loadAdminRfqs();
+}
+
+function readCreds() {
+  const email = $("email").value.trim(), password = $("password").value;
+  if (!email || password.length < 6) { toast("Enter email and 6+ char password"); return null; }
+  return { email, password };
+}
+async function signIn() {
+  const c = readCreds(); if (!c) return;
+  const { error } = await db.auth.signInWithPassword(c);
+  if (error) toast(error.message); else toast("Signed in");
+}
+async function signUp() {
+  const c = readCreds(); if (!c) return;
+  const { data, error } = await db.auth.signUp(c);
+  if (error) toast(error.message); else toast(data.session ? "Account created" : "Check email to confirm");
+}
+async function signOut() { await db.auth.signOut(); toast("Signed out"); }
+
+document.addEventListener("click", (e) => {
+  const tab = e.target.closest("[data-tab]");
+  if (tab) { switchTab(tab.dataset.tab); return; }
+  const btn = e.target.closest("[data-action]");
+  if (!btn) return;
+  const { action, id, status } = btn.dataset;
+  if (action === "toggle-auth") $("auth-box").classList.toggle("hidden");
+  else if (action === "signin") signIn();
+  else if (action === "signup") signUp();
+  else if (action === "logout") signOut();
+  else if (action === "add") addToCart(id);
+  else if (action === "inc") changeQty(id, 1);
+  else if (action === "dec") changeQty(id, -1);
+  else if (action === "remove") removeItem(id);
+  else if (action === "submit-rfq") submitRfq();
+  else if (action === "add-highlight") addHighlight();
+  else if (action === "add-product") addProduct();
+  else if (action === "refresh-admin") loadAdminRfqs();
+  else if (action === "rfq-status") updateRfqStatus(id, status);
+});
+
+db.auth.onAuthStateChange((_evt, session) => {
+  state.user = session ? session.user : null;
+  renderAuth();
+  setTimeout(() => { loadRole(); loadCart(); }, 0);
+});
+
+loadHighlights();
+loadProducts();
+</script>
+</body>
+</html>
